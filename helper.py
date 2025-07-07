@@ -1,40 +1,74 @@
-def get_embedding(prompt, model="nomic-embed-text"):
+import requests
+from opensearchpy import OpenSearch
 
-  import requests
-  url="http://localhost:11434/api/embeddings"
-  data = {
-    "model": model,
-    "prompt": prompt,
-  }
-  response =  requests.post(url, json=data)
-  response.raise_for_status()
-  
-  return response.json().get("embedding", None)
+
+def get_embedding(prompt, model="nomic-embed-text"):
+    """
+    Get the embedding for the given prompt using the specified model.
+
+    Args:
+        prompt (str): The prompt to embed.
+        model (str): The model to use for embedding. Default is "nomic-embed-text".
+
+    Returns:
+        list: The embedding vector.
+    """
+    url = "http://localhost:11434/api/embeddings/"
+    headers = {"Content-Type": "application/json"}
+    data = {"prompt": prompt, "model": model}
+
+    response = requests.post(url, headers=headers, json=data)
+
+    if response.status_code == 200:
+        return response.json().get("embedding", [])
+    else:
+        raise Exception(
+            f"Error fetching embedding: {response.status_code}, {response.text}"
+        )
 
 
 def get_opensearch_client(host, port):
-  from opensearchpy import OpenSearch
+    client = OpenSearch(
+        hosts=[{"host": host, "port": port}],
+        http_compress=True,
+        timeout=30,
+        max_retries=3,
+        retry_on_timeout=True,
+    )
+
+    if client.ping():
+        print("Connected to OpenSearch!")
+        info = client.info()
+        print(f"Cluster name: {info['cluster_name']}")
+        print(f"OpenSearch version: {info['version']['number']}")
+    else:
+        print("Connection failed!")
+        raise ConnectionError("Failed to connect to OpenSearch.")
+    return client
 
 
-  client = OpenSearch(
-    hosts = [{'host': host, 'port': port}],
-    http_compress = True, # enables gzip compression for request bodies
-    retry_on_timeout = True,
-    max_retries=3,
-    timeout=30
-  )
+# token count using Tiktoken
+def get_token_count(text, model="gpt-3.5-turbo"):
+    """
+    Get the token count for the given text using the specified model.
 
-  if client.ping():
-    print("connected to Opensearch")
+    Args:
+        text (str): The text to count tokens for.
+        model (str): The model to use for token counting. Default is "gpt-3.5-turbo".
 
-  return client
+    Returns:
+        int: The number of tokens in the text.
+    """
+    import tiktoken
+
+    encoding = tiktoken.encoding_for_model(model)
+    return len(encoding.encode(text))
+
 
 if __name__ == "__main__":
-  # prompt = "what is celebrated on july 4"
-  # embedding = get_embedding(prompt)
-  # print(f"Embadding for prompt=> {prompt} : {embedding}")
-  get_opensearch_client("localhost", 9200)
-  sample_embedding = get_embedding("Sample text for dimension detection")
-  dimension = len(sample_embedding)
-  print(f"Using embedding dimension: {dimension}")
-
+    # Example usage
+    try:
+        embedding = get_embedding("This is a test prompt.")
+        print("Embedding:", embedding)
+    except Exception as e:
+        print("Failed to get embedding:", e)
